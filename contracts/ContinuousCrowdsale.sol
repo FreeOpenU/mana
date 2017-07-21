@@ -1,17 +1,31 @@
 pragma solidity ^0.4.11;
 
-import "zeppelin-solidity/contracts/crowdsale/Crowdsale.sol";
+import "zeppelin-solidity/contracts/token/MintableToken.sol";
 
 /**
  * @title ContinuousCrowdsale
  * @dev ContinuousCrowdsale implements a contract for managing a continuous token sale
  */
-contract ContinuousCrowdsale is Crowdsale {
+contract ContinuousCrowdsale {
+    using SafeMath for uint256;
+
     // time bucket size
     uint256 public constant BUCKET_SIZE = 12 hours;
 
-    // true if continous sale is enabled
-    bool public continuousSale = false;
+    // the token being sold
+    MintableToken public token;
+
+    // address where funds are collected
+    address public wallet;
+
+    // amount of tokens emitted per wei
+    uint256 public rate;
+
+    // amount of raised money in wei
+    uint256 public weiRaised;
+
+    // max amount of tokens to mint per time bucket
+    uint256 public issuance;
 
     // last time bucket from which tokens have been purchased
     uint256 public lastBucket = 0;
@@ -19,20 +33,32 @@ contract ContinuousCrowdsale is Crowdsale {
     // amount issued in the last bucket
     uint256 public bucketAmount = 0;
 
-    // max amount of tokens to mint per time bucket
-    uint256 public issuance = 0;
+    event TokenPurchase(address indexed investor, address indexed beneficiary, uint256 weiAmount, uint256 tokens);
+
+    function ContinuousCrowdsale(
+        uint256 _rate,
+        address _wallet,
+        MintableToken _token
+    ) {
+        require(_rate != 0);
+        require(_wallet != 0);
+        require(address(token) != 0x0);
+
+        rate = _rate;
+        wallet = _wallet;
+        token = _token;
+    }
+
+    function() payable {
+        buyTokens(msg.sender);
+    }
 
     function buyTokens(address beneficiary) public payable {
         require(beneficiary != 0x0);
 
-        if (continuousSale) {
-            prepareContinuousPurchase();
-            uint256 tokens = processPurchase(beneficiary);
-            checkContinuousPurchase(tokens);
-        } else {
-            require(validPurchase());
-            processPurchase(beneficiary);
-        }
+        prepareContinuousPurchase();
+        uint256 tokens = processPurchase(beneficiary);
+        checkContinuousPurchase(tokens);
     }
 
     function prepareContinuousPurchase() internal {
@@ -54,13 +80,12 @@ contract ContinuousCrowdsale is Crowdsale {
 
     function processPurchase(address beneficiary) internal returns(uint256) {
         uint256 weiAmount = msg.value;
-        uint256 updatedWeiRaised = weiRaised.add(weiAmount);
 
         // calculate token amount to be created
         uint256 tokens = weiAmount.mul(rate);
 
         // update state
-        weiRaised = updatedWeiRaised;
+        weiRaised = weiRaised.add(weiAmount);
 
         token.mint(beneficiary, tokens);
         TokenPurchase(msg.sender, beneficiary, weiAmount, tokens);
@@ -68,5 +93,9 @@ contract ContinuousCrowdsale is Crowdsale {
         forwardFunds();
 
         return tokens;
+    }
+
+    function forwardFunds() internal {
+        wallet.transfer(msg.value);
     }
 }

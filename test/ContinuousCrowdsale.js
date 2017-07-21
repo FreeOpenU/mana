@@ -63,7 +63,6 @@ contract('ContinuousCrowdsale', function ([_, buyer, wallet, purchaser]) {
       await crowdsale.send(value).should.be.rejectedWith(EVMThrow)
     })
 
-    // TODO: this test is not very resilient
     it('should handle time buckets for token issuance', async function () {
       await advanceToBlock(endBlock)
 
